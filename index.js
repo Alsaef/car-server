@@ -1,5 +1,6 @@
 const express = require('express')
 const app = express()
+const jwt = require('jsonwebtoken');
 const port = process.env.PORT || 3000
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config()
@@ -21,6 +22,25 @@ const client = new MongoClient(uri, {
   }
 });
 
+
+const verifyJWT=(req,res,next)=>{
+     console.log('hitting server')
+    //  console.log(req.headers.authorize)
+      const authorize=req.headers.authorize;
+      if (!authorize) {
+        return res.status(401).send({error:true,message:'unauthorize access'})
+      }
+      const token = authorize.split(' ')[1]
+      console.log(token)
+      jwt.verify(token,process.env.ACCESS_TOKEN,(error,decoded)=>{
+        if(error){
+          res.status(401).send({error: true , message:"unauthorize access"})
+        }
+        req.decoded=decoded
+        next()
+      })
+}
+
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
@@ -29,6 +49,20 @@ async function run() {
     const services = database.collection("services");
     const bookingDB = client.db("CarService");
     const bookings = bookingDB.collection("booking");
+
+  // jwt
+
+   app.post('/jwt',(req,res)=>{
+    const user= req.body;
+    console.log(user)
+    const token= jwt.sign(user,process.env.ACCESS_TOKEN,{
+      expiresIn:'1h'
+    });
+    console.log(token)
+    res.send({token})
+
+   })
+
     // red data 
     app.get('/services', async (req, res) => {
       const cursor = services.find();
@@ -47,12 +81,12 @@ async function run() {
     })
 
     //  booking
-    app.get('/bookings', async (req, res) => {
+    app.get('/bookings',verifyJWT,async (req, res) => {
       let query = {};
       if (req.query?.email) {
         query = { email: req.query.email }
       }
-      console.log(req.query?.email)
+      // console.log(req.headers.authorize)
       const cursor = bookings.find(query);
       const result = await cursor.toArray()
       res.send(result)
